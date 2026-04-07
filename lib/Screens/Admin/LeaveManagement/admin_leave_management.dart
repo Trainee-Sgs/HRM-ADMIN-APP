@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'admin_leave_requests.dart';
 import 'admin_leave_status.dart';
 import 'admin_leave_report.dart';
+import 'apply_leave.dart';
 
 class AdminLeaveManagementScreen extends StatelessWidget {
   const AdminLeaveManagementScreen({super.key});
@@ -65,6 +66,19 @@ class AdminLeaveManagementScreen extends StatelessWidget {
                   context,
                   MaterialPageRoute(
                     builder: (context) => const AdminLeaveStatusScreen(),
+                  ),
+                ),
+              ),
+              _buildFeatureCard(
+                context,
+                title: "Apply Leave",
+                icon: Icons.edit_calendar_outlined,
+                color: const Color(0xFFE0F2F1),
+                iconColor: const Color(0xFF00897B),
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const ApplyLeaveScreen(),
                   ),
                 ),
               ),

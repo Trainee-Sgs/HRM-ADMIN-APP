@@ -5,7 +5,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../Screens/login_section/login_screen.dart';
 
 class AdminDrawer extends StatelessWidget {
-  const AdminDrawer({super.key});
+  final VoidCallback? onBackToHrm;
+  const AdminDrawer({super.key, this.onBackToHrm});
 
   @override
   Widget build(BuildContext context) {
@@ -23,6 +24,13 @@ class AdminDrawer extends StatelessWidget {
                 _buildDrawerItem(Icons.notifications_none, "Notifications", () {}),
                 _buildDrawerItem(Icons.settings_outlined, "Settings", () {}),
                 _buildDrawerItem(Icons.help_outline, "Help & Support", () {}),
+                _buildDrawerItem(Icons.home_outlined, "HRM", () {
+                  if (onBackToHrm != null) {
+                    onBackToHrm!();
+                  } else {
+                    Navigator.pop(context);
+                  }
+                }),
                 const Divider(),
                 _buildDrawerItem(Icons.logout, "Logout", () => _handleLogout(context), color: Colors.red),
               ],

@@ -3,15 +3,18 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../Admin/admin_dashboard.dart';
+import '../../Models/login_api.dart';
 
 class OtpBottomSheet extends StatefulWidget {
   final String phoneNumber;
   final String cusId;
+  final String token;
 
   const OtpBottomSheet({
     super.key,
     required this.phoneNumber,
     required this.cusId,
+    required this.token,
   });
 
   @override
@@ -87,7 +90,7 @@ class _OtpBottomSheetState extends State<OtpBottomSheet> {
             children: [
               Row(
                 children: [
-                   CircleAvatar(
+                  CircleAvatar(
                     radius: width * 0.05,
                     backgroundColor: Colors.grey.shade300,
                     child: IconButton(
@@ -147,7 +150,7 @@ class _OtpBottomSheetState extends State<OtpBottomSheet> {
 
               Center(
                 child: SizedBox(
-                   height: height * 0.065,
+                  height: height * 0.065,
                   width: width,
                   child: Stack(
                     children: [
@@ -166,11 +169,13 @@ class _OtpBottomSheetState extends State<OtpBottomSheet> {
                         child: TextField(
                           controller: _otpController,
                           focusNode: _otpFocusNode,
-                          keyboardType: TextInputType.number,
+                          keyboardType: const TextInputType.numberWithOptions(
+                              decimal: false),
                           maxLength: 6,
                           autofocus: true,
                           showCursor: false,
                           enableInteractiveSelection: false,
+                          enableSuggestions: true,
                           autofillHints: const [AutofillHints.oneTimeCode],
                           style: const TextStyle(color: Colors.transparent),
                           decoration: const InputDecoration(
@@ -304,50 +309,96 @@ class _OtpBottomSheetState extends State<OtpBottomSheet> {
     String otp = _otpController.text;
 
     if (otp.length != 6) {
-      _snack("Enter valid OTP", false);
+      _snack("Enter 6-digit OTP", false);
       return;
     }
 
     setState(() => isLoading = true);
 
-    // Mock Delay
-    await Future.delayed(const Duration(milliseconds: 1500));
-
     try {
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setBool('isLoggedIn', true);
-      await prefs.setString("employee_table_id", "9999");
-      await prefs.setInt("uid", 9999);
-      await prefs.setString("cid", "21472147");
-      await prefs.setString("name", "Mock Admin");
+      String lat = prefs.getString('lt') ?? "0.0";
+      String lng = prefs.getString('ln') ?? "0.0";
+      String deviceId = prefs.getString('device_id') ?? "123";
 
-      _snack("OTP verified successfully (Mock)", true);
+      print("CALLING VERIFY SMS OTP: mobile=${widget.phoneNumber}, otp=$otp, token=${widget.token}");
 
-      if (mounted) {
-        Navigator.pushAndRemoveUntil(
-          context,
-          MaterialPageRoute(builder: (_) => const AdminDashboard()),
-          (route) => false,
-        );
+      final response = await LoginApi.verifySmsOtp(
+        mobile: widget.phoneNumber,
+        otp: otp,
+        token: widget.token,
+        deviceId: deviceId,
+        lat: lat,
+        lng: lng,
+      );
+
+      print("--- OTP VERIFICATION API RESULT ---");
+      print(response.toString());
+
+      if (response.error == false) {
+        // SUCCESS - Save session data
+        await prefs.setBool('isLoggedIn', true);
+        await prefs.setString("login_cus_id", response.cusId ?? widget.cusId);
+        await prefs.setString("token", response.token ?? widget.token);
+        await prefs.setString("name", response.name ?? "");
+
+        if (response.cid != null) {
+          await prefs.setString("cid", response.cid.toString());
+        }
+
+        _snack("OTP verified successfully", true);
+
+        if (mounted) {
+          Navigator.pushAndRemoveUntil(
+            context,
+            MaterialPageRoute(builder: (_) => const AdminDashboard()),
+            (route) => false,
+          );
+        }
+      } else {
+        if (mounted) {
+          setState(() => isLoading = false);
+          _snack(response.errorMsg, false);
+        }
       }
     } catch (e) {
-      _snack("Error saving local data", false);
-    }
-
-    if (mounted) {
-      setState(() => isLoading = false);
+      debugPrint("OTP VERIFICATION ERROR => $e");
+      if (mounted) {
+        setState(() => isLoading = false);
+        _snack("Error: $e", false);
+      }
     }
   }
 
-  /// ✅ MOCK RESEND OTP (API BINDING REMOVED)
   Future<void> _resendOtpApi() async {
     setState(() => isLoading = true);
-    await Future.delayed(const Duration(milliseconds: 1000));
-    
-    if (mounted) {
-      setState(() => isLoading = false);
-      _snack("OTP Resent Successfully (Mock)", true);
-      startTimer();
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final lat = prefs.getString('lt') ?? "0.0";
+      final lng = prefs.getString('ln') ?? "0.0";
+      final deviceId = prefs.getString('device_id') ?? "123";
+
+      final response = await LoginApi.sendSmsOtp(
+        mobile: widget.phoneNumber,
+        deviceId: deviceId,
+        lat: lat,
+        lng: lng,
+      );
+
+      if (mounted) {
+        setState(() => isLoading = false);
+        if (response.error == false) {
+          _snack("OTP Resent successfully", true);
+          startTimer();
+        } else {
+          _snack(response.errorMsg, false);
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => isLoading = false);
+        _snack("Error resending OTP", false);
+      }
     }
   }
 

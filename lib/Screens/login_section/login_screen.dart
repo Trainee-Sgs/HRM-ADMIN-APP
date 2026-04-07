@@ -1,9 +1,15 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:device_info_plus/device_info_plus.dart';
+
 import 'sign-in_sms.dart';
 import 'sign-in_whatsapp.dart';
 import 'sign-up.dart';
+import 'login_user_pass.dart';
 import 'otp_popup.dart';
+
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -15,6 +21,33 @@ class LoginScreen extends StatefulWidget {
 class _LoginScreenState extends State<LoginScreen> {
   final TextEditingController _emailController = TextEditingController();
   bool isLoadingLogin = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _initDeviceData();
+  }
+
+  Future<void> _initDeviceData() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (prefs.getString('device_id') == null) {
+      String deviceId = "Unknown";
+      try {
+        final DeviceInfoPlugin deviceInfo = DeviceInfoPlugin();
+        if (Platform.isAndroid) {
+          final androidInfo = await deviceInfo.androidInfo;
+          deviceId = androidInfo.id;
+        } else if (Platform.isIOS) {
+          final iosInfo = await deviceInfo.iosInfo;
+          deviceId = iosInfo.identifierForVendor ?? "Unknown";
+        }
+        await prefs.setString("device_id", deviceId);
+      } catch (e) {
+        debugPrint("Error getting device ID: $e");
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     // MediaQuery
@@ -99,18 +132,7 @@ class _LoginScreenState extends State<LoginScreen> {
                             if (_emailController.text.trim().isEmpty) {
                               ScaffoldMessenger.of(context).showSnackBar(
                                 const SnackBar(
-                                  content: Text("Please enter your email"),
-                                ),
-                              );
-                              return;
-                            }
-
-                            if (!RegExp(
-                              r"^[a-zA-Z0-9.a-zA-Z0-9.!#$%&'*+-/=?^_`{|}~]+@[a-zA-Z0-9]+\.[a-zA-Z]+",
-                            ).hasMatch(_emailController.text.trim())) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text("Please enter a valid email"),
+                                  content: Text("Please enter your email or mobile"),
                                 ),
                               );
                               return;
@@ -131,6 +153,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                   return OtpBottomSheet(
                                     phoneNumber: _emailController.text.trim(),
                                     cusId: "9999", // Mocked customer ID
+                                    token: "",
                                   );
                                 },
                               );
@@ -188,7 +211,7 @@ class _LoginScreenState extends State<LoginScreen> {
                             ),
                           );
                         },
-                        icon: FaIcon(
+                        icon: const FaIcon(
                           FontAwesomeIcons.whatsapp,
                           color: Colors.green,
                           size: 28,
@@ -239,12 +262,36 @@ class _LoginScreenState extends State<LoginScreen> {
 
                 SizedBox(height: height * 0.04),
 
+                /// Login with Password link
+                Center(
+                  child: TextButton(
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const LoginUserPassScreen(),
+                        ),
+                      );
+                    },
+                    child: const Text(
+                      "Login with Password",
+                      style: TextStyle(
+                        fontSize: 16,
+                        color: Color(0xff26A69A),
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ),
+
+                SizedBox(height: height * 0.04),
+
                 /// Sign Up Text
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     const Text(
-                      "Don’t Have an Account? ",
+                      "Donâ€™t Have an Account? ",
                       style: TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.w600,

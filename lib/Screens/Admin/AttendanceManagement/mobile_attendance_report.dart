@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../../../Models/attendance_api.dart';
 
 class MobileAttendanceScreen extends StatefulWidget {
   const MobileAttendanceScreen({super.key});
@@ -10,28 +11,34 @@ class MobileAttendanceScreen extends StatefulWidget {
 }
 
 class _MobileAttendanceScreenState extends State<MobileAttendanceScreen> {
-  final List<Map<String, dynamic>> _mobileLogs = [
-    {
-      "name": "Kavi Priyan",
-      "id": "EMP001",
-      "checkIn": "09:05 AM",
-      "checkOut": "--:--",
-      "location": "Chennai, TN",
-      "device": "Android (Pixel 7)",
-      "photo": "https://api.dicebear.com/7.x/avataaars/png?seed=Kavi",
-      "selfie": "https://api.dicebear.com/7.x/avataaars/png?seed=Kavi",
-    },
-    {
-      "name": "Arun Kumar",
-      "id": "EMP002",
-      "checkIn": "08:55 AM",
-      "checkOut": "06:05 PM",
-      "location": "Coimbatore, TN",
-      "device": "iOS (iPhone 14)",
-      "photo": "https://api.dicebear.com/7.x/avataaars/png?seed=Arun",
-      "selfie": "https://api.dicebear.com/7.x/avataaars/png?seed=Arun",
-    },
-  ];
+  List<MobileAttendanceData> _mobileLogs = [];
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchLogs();
+  }
+
+  Future<void> _fetchLogs() async {
+    setState(() => _isLoading = true);
+    try {
+      final response = await AttendanceApi.fetchMobileAttendance();
+      if (mounted) {
+        setState(() {
+          _mobileLogs = response.data;
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Error fetching mobile logs: $e")),
+        );
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -40,21 +47,32 @@ class _MobileAttendanceScreenState extends State<MobileAttendanceScreen> {
       appBar: AppBar(
         title: Text(
           "Mobile Attendance Log",
-          style: GoogleFonts.poppins(fontSize: 18.sp, fontWeight: FontWeight.w600),
+          style: GoogleFonts.poppins(
+            fontSize: 18.sp,
+            fontWeight: FontWeight.w600,
+          ),
         ),
         backgroundColor: const Color(0xFF26A69A),
         foregroundColor: Colors.white,
         elevation: 0,
       ),
-      body: ListView.builder(
-        padding: EdgeInsets.all(16.w),
-        itemCount: _mobileLogs.length,
-        itemBuilder: (context, index) => _mobileLogCard(_mobileLogs[index]),
+      body: RefreshIndicator(
+        onRefresh: _fetchLogs,
+        child: _isLoading
+            ? const Center(child: CircularProgressIndicator())
+            : _mobileLogs.isEmpty
+            ? const Center(child: Text("No records found"))
+            : ListView.builder(
+                padding: EdgeInsets.all(16.w),
+                itemCount: _mobileLogs.length,
+                itemBuilder: (context, index) =>
+                    _mobileLogCard(_mobileLogs[index]),
+              ),
       ),
     );
   }
 
-  Widget _mobileLogCard(Map<String, dynamic> log) {
+  Widget _mobileLogCard(MobileAttendanceData log) {
     return Container(
       margin: EdgeInsets.only(bottom: 16.h),
       padding: EdgeInsets.all(16.w),
@@ -73,9 +91,24 @@ class _MobileAttendanceScreenState extends State<MobileAttendanceScreen> {
         children: [
           Row(
             children: [
-              ClipRRect(
-                borderRadius: BorderRadius.circular(10.r),
-                child: Image.network(log['selfie'], width: 60.w, height: 60.w, fit: BoxFit.cover),
+              Container(
+                width: 60.w,
+                height: 60.w,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(10.r),
+                  color: Colors.grey.shade100,
+                ),
+                child: log.selfie.isNotEmpty
+                    ? ClipRRect(
+                        borderRadius: BorderRadius.circular(10.r),
+                        child: Image.network(
+                          log.selfie,
+                          fit: BoxFit.cover,
+                          errorBuilder: (c, e, s) =>
+                              const Icon(Icons.person, color: Colors.grey),
+                        ),
+                      )
+                    : const Icon(Icons.person, color: Colors.grey),
               ),
               SizedBox(width: 15.w),
               Expanded(
@@ -83,21 +116,47 @@ class _MobileAttendanceScreenState extends State<MobileAttendanceScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      log['name'],
-                      style: GoogleFonts.poppins(fontSize: 15.sp, fontWeight: FontWeight.bold),
+                      log.employeeName,
+                      style: GoogleFonts.poppins(
+                        fontSize: 15.sp,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                     Row(
                       children: [
-                        Icon(Icons.location_on, size: 12.sp, color: Colors.blueGrey),
+                        Icon(
+                          Icons.location_on,
+                          size: 12.sp,
+                          color: Colors.blueGrey,
+                        ),
                         SizedBox(width: 4.w),
-                        Text(log['location'], style: GoogleFonts.poppins(fontSize: 11.sp, color: Colors.grey)),
+                        Expanded(
+                          child: Text(
+                            log.loc,
+                            style: GoogleFonts.poppins(
+                              fontSize: 11.sp,
+                              color: Colors.grey,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
                       ],
                     ),
                     Row(
                       children: [
-                        Icon(Icons.smartphone, size: 12.sp, color: Colors.blueGrey),
+                        Icon(
+                          Icons.work_outline,
+                          size: 12.sp,
+                          color: Colors.blueGrey,
+                        ),
                         SizedBox(width: 4.w),
-                        Text(log['device'], style: GoogleFonts.poppins(fontSize: 11.sp, color: Colors.grey)),
+                        Text(
+                          log.wrkMde,
+                          style: GoogleFonts.poppins(
+                            fontSize: 11.sp,
+                            color: Colors.grey,
+                          ),
+                        ),
                       ],
                     ),
                   ],
@@ -108,20 +167,30 @@ class _MobileAttendanceScreenState extends State<MobileAttendanceScreen> {
           const Divider(height: 24),
           Row(
             children: [
-              _timeCol("Check In", log['checkIn'], Colors.green),
+              _timeCol("In Time", log.inTime, Colors.green),
               SizedBox(width: 25.w),
-              _timeCol("Check Out", log['checkOut'], Colors.red),
+              _timeCol("Out Time", log.outTime ?? "--:--", Colors.red),
               const Spacer(),
-              ElevatedButton(
-                onPressed: () {},
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFFF1F5F9),
-                  foregroundColor: Colors.blueGrey,
-                  elevation: 0,
-                  padding: EdgeInsets.symmetric(horizontal: 10.w),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8.r)),
+              Container(
+                padding: EdgeInsets.symmetric(horizontal: 10.w, vertical: 4.h),
+                decoration: BoxDecoration(
+                  color:
+                      (log.status.toLowerCase() == 'approved'
+                              ? Colors.green
+                              : Colors.orange)
+                          .withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8.r),
                 ),
-                child: Text("Map", style: GoogleFonts.poppins(fontSize: 10.sp, fontWeight: FontWeight.w600)),
+                child: Text(
+                  log.status,
+                  style: GoogleFonts.poppins(
+                    fontSize: 10.sp,
+                    fontWeight: FontWeight.bold,
+                    color: log.status.toLowerCase() == 'approved'
+                        ? Colors.green
+                        : Colors.orange,
+                  ),
+                ),
               ),
             ],
           ),
@@ -134,9 +203,17 @@ class _MobileAttendanceScreenState extends State<MobileAttendanceScreen> {
                   style: OutlinedButton.styleFrom(
                     side: const BorderSide(color: Colors.redAccent),
                     foregroundColor: Colors.redAccent,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8.r)),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8.r),
+                    ),
                   ),
-                  child: Text("Reject", style: GoogleFonts.poppins(fontSize: 12.sp, fontWeight: FontWeight.w600)),
+                  child: Text(
+                    "Reject",
+                    style: GoogleFonts.poppins(
+                      fontSize: 12.sp,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
                 ),
               ),
               SizedBox(width: 12.w),
@@ -147,9 +224,17 @@ class _MobileAttendanceScreenState extends State<MobileAttendanceScreen> {
                     backgroundColor: const Color(0xFF26A69A),
                     foregroundColor: Colors.white,
                     elevation: 0,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8.r)),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8.r),
+                    ),
                   ),
-                  child: Text("Approve", style: GoogleFonts.poppins(fontSize: 12.sp, fontWeight: FontWeight.w600)),
+                  child: Text(
+                    "Approve",
+                    style: GoogleFonts.poppins(
+                      fontSize: 12.sp,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
                 ),
               ),
             ],
@@ -163,8 +248,18 @@ class _MobileAttendanceScreenState extends State<MobileAttendanceScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label, style: GoogleFonts.poppins(fontSize: 10.sp, color: Colors.grey)),
-        Text(time, style: GoogleFonts.poppins(fontSize: 14.sp, fontWeight: FontWeight.bold, color: color)),
+        Text(
+          label,
+          style: GoogleFonts.poppins(fontSize: 10.sp, color: Colors.grey),
+        ),
+        Text(
+          time,
+          style: GoogleFonts.poppins(
+            fontSize: 14.sp,
+            fontWeight: FontWeight.bold,
+            color: color,
+          ),
+        ),
       ],
     );
   }

@@ -1,45 +1,45 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../../../Models/marketing_api.dart';
 
 class MarketingAttendanceScreen extends StatefulWidget {
   const MarketingAttendanceScreen({super.key});
 
   @override
-  State<MarketingAttendanceScreen> createState() => _MarketingAttendanceScreenState();
+  State<MarketingAttendanceScreen> createState() =>
+      _MarketingAttendanceScreenState();
 }
 
 class _MarketingAttendanceScreenState extends State<MarketingAttendanceScreen> {
-  final List<Map<String, dynamic>> _marketingLogs = [
-    {
-      "name": "Kavi Priyan",
-      "id": "MKT001",
-      "checkIn": "09:15 AM",
-      "status": "In-Field",
-      "location": "T. Nagar, Chennai",
-      "visits": 4,
-      "photo": "https://api.dicebear.com/7.x/avataaars/png?seed=Kavi",
-    },
-    {
-      "name": "Santhosh Mani",
-      "id": "MKT003",
-      "checkIn": "09:45 AM",
-      "status": "In-Field",
-      "location": "Velachery, Chennai",
-      "visits": 2,
-      "photo": "https://api.dicebear.com/7.x/avataaars/png?seed=Santhosh",
-    },
-    {
-       "name": "Arun Kumar",
-       "id": "MKT002",
-       "checkIn": "09:00 AM",
-       "checkOut": "05:30 PM",
-       "status": "Returned",
-       "location": "Adyar, Chennai",
-       "visits": 8,
-       "photo": "https://api.dicebear.com/7.x/avataaars/png?seed=Arun",
+  List<MarketingAttendanceData> _marketingLogs = [];
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchLogs();
+  }
+
+  Future<void> _fetchLogs() async {
+    setState(() => _isLoading = true);
+    try {
+      final response = await MarketingApi.fetchMarketingAttendance();
+      if (mounted) {
+        setState(() {
+          _marketingLogs = response.data;
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Error fetching marketing logs: $e")),
+        );
+      }
     }
-  ];
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -48,38 +48,52 @@ class _MarketingAttendanceScreenState extends State<MarketingAttendanceScreen> {
       appBar: AppBar(
         title: Text(
           "Marketing Attendance",
-          style: GoogleFonts.poppins(fontSize: 18.sp, fontWeight: FontWeight.w600),
+          style: GoogleFonts.poppins(
+            fontSize: 18.sp,
+            fontWeight: FontWeight.w600,
+          ),
         ),
         backgroundColor: const Color(0xFF26A69A),
         foregroundColor: Colors.white,
         elevation: 0,
       ),
-      body: Column(
-        children: [
-          _buildLiveStatusHeader(),
-          Expanded(
-            child: ListView.builder(
-              padding: EdgeInsets.all(16.w),
-              itemCount: _marketingLogs.length,
-              itemBuilder: (context, index) => _marketingReportCard(_marketingLogs[index]),
-            ),
-          ),
-        ],
+      body: RefreshIndicator(
+        onRefresh: _fetchLogs,
+        child: _isLoading
+            ? const Center(child: CircularProgressIndicator())
+            : _marketingLogs.isEmpty
+            ? const Center(child: Text("No records found"))
+            : ListView.builder(
+                padding: EdgeInsets.symmetric(horizontal: 16.w),
+                itemCount: _marketingLogs.length + 1,
+                itemBuilder: (context, index) {
+                  if (index == 0) {
+                    return Padding(
+                      padding: EdgeInsets.symmetric(vertical: 16.h),
+                      child: _buildLiveStatusHeader(),
+                    );
+                  }
+                  return _marketingReportCard(_marketingLogs[index - 1]);
+                },
+              ),
       ),
     );
   }
 
   Widget _buildLiveStatusHeader() {
-    int active = _marketingLogs.where((l) => l['status'] == 'In-Field').length;
+    int active = _marketingLogs.where((l) => l.checkOutTime.isEmpty).length;
+    int returned = _marketingLogs
+        .where((l) => l.checkOutTime.isNotEmpty)
+        .length;
     return Container(
       padding: EdgeInsets.all(16.w),
       color: Colors.white,
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceAround,
         children: [
-          _stat("Active In-Field", "$active", Colors.blue),
-          _stat("Total Visits", "14", Colors.teal),
-          _stat("Returned", "1", Colors.green),
+          _stat("In-Field", "$active", Colors.blue),
+          _stat("Total Logs", "${_marketingLogs.length}", Colors.teal),
+          _stat("Returned", "$returned", Colors.green),
         ],
       ),
     );
@@ -88,16 +102,26 @@ class _MarketingAttendanceScreenState extends State<MarketingAttendanceScreen> {
   Widget _stat(String label, String value, Color color) {
     return Column(
       children: [
-        Text(value, style: GoogleFonts.poppins(fontSize: 20.sp, fontWeight: FontWeight.bold, color: color)),
-        Text(label, style: GoogleFonts.poppins(fontSize: 11.sp, color: Colors.grey)),
+        Text(
+          value,
+          style: GoogleFonts.poppins(
+            fontSize: 20.sp,
+            fontWeight: FontWeight.bold,
+            color: color,
+          ),
+        ),
+        Text(
+          label,
+          style: GoogleFonts.poppins(fontSize: 11.sp, color: Colors.grey),
+        ),
       ],
     );
   }
 
-  Widget _marketingReportCard(Map<String, dynamic> log) {
-    bool inField = log['status'] == 'In-Field';
+  Widget _marketingReportCard(MarketingAttendanceData log) {
+    bool inField = log.checkOutTime.isEmpty;
     return Container(
-      margin: EdgeInsets.only(bottom: 12.h),
+      margin: EdgeInsets.only(bottom: 15.h),
       padding: EdgeInsets.all(16.w),
       decoration: BoxDecoration(
         color: Colors.white,
@@ -111,12 +135,18 @@ class _MarketingAttendanceScreenState extends State<MarketingAttendanceScreen> {
         ],
       ),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              CircleAvatar(
-                radius: 22.r,
-                backgroundImage: NetworkImage(log['photo']),
+              Container(
+                width: 44.r,
+                height: 44.r,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: Colors.teal.withOpacity(0.1),
+                ),
+                child: Icon(Icons.person, color: Colors.teal, size: 22.sp),
               ),
               SizedBox(width: 12.w),
               Expanded(
@@ -124,12 +154,18 @@ class _MarketingAttendanceScreenState extends State<MarketingAttendanceScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      log['name'],
-                      style: GoogleFonts.poppins(fontSize: 15.sp, fontWeight: FontWeight.bold),
+                      log.employeeName,
+                      style: GoogleFonts.poppins(
+                        fontSize: 15.sp,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                     Text(
-                      "ID: ${log['id']}",
-                      style: GoogleFonts.poppins(fontSize: 11.sp, color: Colors.grey),
+                      "ID: ${log.employeeId} | ${log.date}",
+                      style: GoogleFonts.poppins(
+                        fontSize: 11.sp,
+                        color: Colors.grey,
+                      ),
                     ),
                   ],
                 ),
@@ -137,11 +173,13 @@ class _MarketingAttendanceScreenState extends State<MarketingAttendanceScreen> {
               Container(
                 padding: EdgeInsets.symmetric(horizontal: 8.w, vertical: 4.h),
                 decoration: BoxDecoration(
-                  color: (inField ? Colors.blue : Colors.green).withOpacity(0.1),
+                  color: (inField ? Colors.blue : Colors.green).withOpacity(
+                    0.1,
+                  ),
                   borderRadius: BorderRadius.circular(8.r),
                 ),
                 child: Text(
-                  log['status'],
+                  inField ? "In-Field" : "Returned",
                   style: GoogleFonts.poppins(
                     fontSize: 10.sp,
                     fontWeight: FontWeight.bold,
@@ -152,29 +190,113 @@ class _MarketingAttendanceScreenState extends State<MarketingAttendanceScreen> {
             ],
           ),
           const Divider(height: 24),
+
+          // Client & Purpose
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              _info(Icons.login, "Check In", log['checkIn']),
-              _info(Icons.location_on, "Last Location", log['location']),
-              _info(Icons.storefront, "Visits", "${log['visits']}"),
+              Expanded(
+                child: _dataItem(Icons.business, "Client", log.clientName),
+              ),
+              SizedBox(width: 10.w),
+              Expanded(
+                child: _dataItem(
+                  Icons.assignment_outlined,
+                  "Purpose",
+                  log.purposeOfVisit,
+                ),
+              ),
             ],
           ),
+          SizedBox(height: 12.h),
+
+          // Times
+          Row(
+            children: [
+              Expanded(
+                child: _dataItem(Icons.login, "Check-In", log.checkInTime),
+              ),
+              SizedBox(width: 10.w),
+              Expanded(
+                child: _dataItem(
+                  Icons.logout,
+                  "Check-Out",
+                  log.checkOutTime.isEmpty ? "--:--" : log.checkOutTime,
+                ),
+              ),
+            ],
+          ),
+          SizedBox(height: 12.h),
+
+          // Location
+          _dataItem(Icons.location_on_outlined, "Visit Location", log.location),
+
+          if (log.remarks.isNotEmpty) ...[
+            const Divider(height: 24),
+            Text(
+              "Remarks",
+              style: GoogleFonts.poppins(
+                fontSize: 10.sp,
+                color: Colors.grey,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            Text(
+              log.remarks,
+              style: GoogleFonts.poppins(
+                fontSize: 12.sp,
+                color: Colors.blueGrey,
+                fontStyle: FontStyle.italic,
+              ),
+            ),
+          ],
+
+          if (log.attachments != null && log.attachments!.isNotEmpty) ...[
+            SizedBox(height: 12.h),
+            Text(
+              "Attachments Available",
+              style: GoogleFonts.poppins(
+                fontSize: 10.sp,
+                color: Colors.teal,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ],
         ],
       ),
     );
   }
 
-  Widget _info(IconData icon, String label, String value) {
-    return Expanded(
-      child: Column(
-        children: [
-          Icon(icon, size: 16.sp, color: Colors.grey.shade400),
-          SizedBox(height: 4.h),
-          Text(label, style: GoogleFonts.poppins(fontSize: 10.sp, color: Colors.grey), textAlign: TextAlign.center),
-          Text(value, style: GoogleFonts.poppins(fontSize: 12.sp, fontWeight: FontWeight.w600), textAlign: TextAlign.center),
-        ],
-      ),
+  Widget _dataItem(IconData icon, String label, String value) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 14.sp, color: Colors.grey.shade400),
+            SizedBox(width: 4.w),
+            Flexible(
+              child: Text(
+                label,
+                style: GoogleFonts.poppins(fontSize: 10.sp, color: Colors.grey),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        ),
+        SizedBox(height: 2.h),
+        Text(
+          value.isEmpty ? "--" : value,
+          style: GoogleFonts.poppins(
+            fontSize: 12.sp,
+            fontWeight: FontWeight.w600,
+            color: Colors.black87,
+          ),
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+        ),
+      ],
     );
   }
 }

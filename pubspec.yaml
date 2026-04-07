@@ -41,6 +41,12 @@ dependencies:
   google_fonts: ^8.0.2
   intl: ^0.20.2
   url_launcher: ^6.3.2
+  http: ^1.6.0
+  device_info_plus: ^12.4.0
+  image_picker: ^1.2.1
+  dotted_border: ^2.1.0
+  google_mlkit_face_detection: ^0.13.2
+  geocoding: ^4.0.0
 
 dev_dependencies:
   flutter_test:

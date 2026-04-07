@@ -1,11 +1,14 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:device_info_plus/device_info_plus.dart';
 
 import 'login_screen.dart';
 import 'sign-in_whatsapp.dart';
 import 'sign-up.dart';
 import 'otp_popup.dart';
+import '../../Models/login_api.dart';
 
 class SmsLogin extends StatefulWidget {
   const SmsLogin({super.key});
@@ -17,6 +20,36 @@ class SmsLogin extends StatefulWidget {
 class _SmsLoginState extends State<SmsLogin> {
   final TextEditingController _emailController = TextEditingController();
   bool isLoading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _initDeviceData();
+  }
+
+  Future<void> _initDeviceData() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (prefs.getString('device_id') == null) {
+      String deviceId = "Unknown";
+      try {
+        final DeviceInfoPlugin deviceInfo = DeviceInfoPlugin();
+        if (Platform.isAndroid) {
+          final androidInfo = await deviceInfo.androidInfo;
+          deviceId = androidInfo.id;
+        } else if (Platform.isIOS) {
+          final iosInfo = await deviceInfo.iosInfo;
+          deviceId = iosInfo.identifierForVendor ?? "Unknown";
+        }
+        await prefs.setString("device_id", deviceId);
+      } catch (e) {
+        debugPrint("Error getting device ID: $e");
+      }
+    }
+    
+    // Also ensure lat/lng are there or default to 0.0
+    if (prefs.getString('lt') == null) await prefs.setString('lt', "0.0");
+    if (prefs.getString('ln') == null) await prefs.setString('ln', "0.0");
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -250,7 +283,6 @@ class _SmsLoginState extends State<SmsLogin> {
     );
   }
 
-  /// ✅ MOCK SEND OTP (API BINDING REMOVED)
   Future<void> _sendOtpApi() async {
     final mobile = _emailController.text.trim();
     if (mobile.isEmpty) {
@@ -270,24 +302,62 @@ class _SmsLoginState extends State<SmsLogin> {
 
     setState(() => isLoading = true);
 
-    // Mock delay
-    await Future.delayed(const Duration(milliseconds: 1000));
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final lat = prefs.getString('lt') ?? "0.0";
+      final lng = prefs.getString('ln') ?? "0.0";
+      final deviceId = prefs.getString('device_id') ?? "123";
 
-    if (mounted) {
-      setState(() => isLoading = false);
-      _snack("OTP sent successfully (Mock)", true);
-
-      showModalBottomSheet(
-        context: context,
-        isScrollControlled: true,
-        backgroundColor: Colors.transparent,
-        builder: (_) {
-          return OtpBottomSheet(
-            phoneNumber: _emailController.text.trim(),
-            cusId: "9999", // Mocked ID
-          );
-        },
+      final response = await LoginApi.sendSmsOtp(
+        mobile: mobile,
+        deviceId: deviceId,
+        lat: lat,
+        lng: lng,
       );
+
+      debugPrint("SMS LOGIN RESPONSE => ${response.errorMsg}");
+
+      if (response.error == false) {
+        final String cusId = response.cusId ?? "";
+
+        // PERSIST SESSION DATA
+        if (cusId.isNotEmpty) {
+          await prefs.setString("login_cus_id", cusId);
+        }
+
+        if (response.cid != null) {
+          await prefs.setString("cid", response.cid.toString());
+        }
+
+        if (mounted) {
+          setState(() => isLoading = false);
+          _snack("OTP sent successfully", true);
+
+          showModalBottomSheet(
+            context: context,
+            isScrollControlled: true,
+            backgroundColor: Colors.transparent,
+            builder: (_) {
+              return OtpBottomSheet(
+                phoneNumber: mobile,
+                cusId: cusId,
+                token: response.token ?? "",
+              );
+            },
+          );
+        }
+      } else {
+        if (mounted) {
+          setState(() => isLoading = false);
+          _snack(response.errorMsg, false);
+        }
+      }
+    } catch (e) {
+      debugPrint("SMS LOGIN ERROR => $e");
+      if (mounted) {
+        setState(() => isLoading = false);
+        _snack("Error: $e", false);
+      }
     }
   }
 

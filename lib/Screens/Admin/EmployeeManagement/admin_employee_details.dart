@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../../../Models/employee_api.dart';
 import 'employee_confirmation.dart';
 import 'resignation_process.dart';
 import 'employee_history.dart';
@@ -190,32 +191,35 @@ class AdminEmployeeListScreen extends StatefulWidget {
 }
 
 class _AdminEmployeeListScreenState extends State<AdminEmployeeListScreen> {
-  final List<Map<String, dynamic>> _employees = [
-    {
-      "id": "EMP001",
-      "name": "Kavi Priyan",
-      "designation": "Android Developer",
-      "dept": "Development",
-      "status": "Active",
-      "photo": "https://api.dicebear.com/7.x/avataaars/png?seed=Kavi",
-    },
-    {
-      "id": "EMP002",
-      "name": "Arun Kumar",
-      "designation": "Manager",
-      "dept": "HR",
-      "status": "Active",
-      "photo": "https://api.dicebear.com/7.x/avataaars/png?seed=Arun",
-    },
-    {
-      "id": "EMP003",
-      "name": "Santhosh Mani",
-      "designation": "UI Designer",
-      "dept": "Creative",
-      "status": "On Leave",
-      "photo": "https://api.dicebear.com/7.x/avataaars/png?seed=Santhosh",
-    },
-  ];
+  List<EmployeeData> _employees = [];
+  bool _isLoading = true;
+  final TextEditingController _searchController = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchEmployees();
+  }
+
+  Future<void> _fetchEmployees({String? name}) async {
+    setState(() => _isLoading = true);
+    try {
+      final response = await EmployeeApi.fetchEmployeeDetails(employeeName: name);
+      if (mounted) {
+        setState(() {
+          _employees = response.data;
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Error fetching employees: $e")),
+        );
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -237,11 +241,16 @@ class _AdminEmployeeListScreenState extends State<AdminEmployeeListScreen> {
         children: [
           _buildSearchBar(),
           Expanded(
-            child: ListView.builder(
-              padding: EdgeInsets.all(16.w),
-              itemCount: _employees.length,
-              itemBuilder: (context, index) => _employeeCard(_employees[index]),
-            ),
+            child: _isLoading
+                ? const Center(child: CircularProgressIndicator())
+                : _employees.isEmpty
+                    ? const Center(child: Text("No employees found"))
+                    : ListView.builder(
+                        padding: EdgeInsets.all(16.w),
+                        itemCount: _employees.length,
+                        itemBuilder: (context, index) =>
+                            _employeeCard(_employees[index]),
+                      ),
           ),
         ],
       ),
@@ -253,9 +262,18 @@ class _AdminEmployeeListScreenState extends State<AdminEmployeeListScreen> {
       padding: EdgeInsets.all(16.w),
       color: Colors.white,
       child: TextField(
+        controller: _searchController,
+        onSubmitted: (val) => _fetchEmployees(name: val.trim()),
         decoration: InputDecoration(
           hintText: "Search Employee...",
           prefixIcon: const Icon(Icons.search),
+          suffixIcon: IconButton(
+            icon: const Icon(Icons.clear),
+            onPressed: () {
+              _searchController.clear();
+              _fetchEmployees();
+            },
+          ),
           filled: true,
           fillColor: const Color(0xFFF1F5F9),
           border: OutlineInputBorder(
@@ -267,7 +285,7 @@ class _AdminEmployeeListScreenState extends State<AdminEmployeeListScreen> {
     );
   }
 
-  Widget _employeeCard(Map<String, dynamic> emp) {
+  Widget _employeeCard(EmployeeData emp) {
     return InkWell(
       onTap: () => Navigator.push(
         context,
@@ -296,11 +314,19 @@ class _AdminEmployeeListScreenState extends State<AdminEmployeeListScreen> {
               height: 50.r,
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(12.r),
-                image: DecorationImage(
-                  image: NetworkImage(emp['photo']),
-                  fit: BoxFit.cover,
-                ),
+                color: Colors.grey.shade100,
               ),
+              child: emp.profilePhoto != null
+                  ? ClipRRect(
+                      borderRadius: BorderRadius.circular(12.r),
+                      child: Image.network(
+                        emp.profilePhoto,
+                        fit: BoxFit.cover,
+                        errorBuilder: (c, e, s) =>
+                            const Icon(Icons.person, color: Colors.grey),
+                      ),
+                    )
+                  : const Icon(Icons.person, color: Colors.grey),
             ),
             SizedBox(width: 15.w),
             Expanded(
@@ -308,14 +334,14 @@ class _AdminEmployeeListScreenState extends State<AdminEmployeeListScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    emp['name'],
+                    emp.name,
                     style: GoogleFonts.poppins(
                       fontSize: 15.sp,
                       fontWeight: FontWeight.bold,
                     ),
                   ),
                   Text(
-                    "${emp['id']} | ${emp['designation']}",
+                    "${emp.employeeCode} | ${emp.department}",
                     style: GoogleFonts.poppins(
                       fontSize: 12.sp,
                       color: Colors.grey,
@@ -332,7 +358,9 @@ class _AdminEmployeeListScreenState extends State<AdminEmployeeListScreen> {
                       borderRadius: BorderRadius.circular(4.r),
                     ),
                     child: Text(
-                      emp['dept'],
+                      emp.employeeStatus.isNotEmpty
+                          ? emp.employeeStatus
+                          : "Active",
                       style: TextStyle(
                         fontSize: 10.sp,
                         color: Colors.blue,
@@ -352,7 +380,7 @@ class _AdminEmployeeListScreenState extends State<AdminEmployeeListScreen> {
 }
 
 class AdminEmployeeDetailsScreen extends StatelessWidget {
-  final Map<String, dynamic> employee;
+  final EmployeeData employee;
   const AdminEmployeeDetailsScreen({super.key, required this.employee});
 
   @override
@@ -361,7 +389,7 @@ class AdminEmployeeDetailsScreen extends StatelessWidget {
       backgroundColor: Colors.white,
       appBar: AppBar(
         title: Text(
-          employee['name'],
+          employee.name,
           style: GoogleFonts.poppins(
             fontSize: 18.sp,
             fontWeight: FontWeight.w600,
@@ -385,62 +413,62 @@ class AdminEmployeeDetailsScreen extends StatelessWidget {
                   _infoSection("Professional Information", [
                     _detailRow(
                       Icons.badge_outlined,
-                      "Employee ID",
-                      employee['id'],
+                      "Employee Code",
+                      employee.employeeCode,
                     ),
                     _detailRow(
                       Icons.business_outlined,
                       "Department",
-                      employee['dept'],
+                      employee.department,
                     ),
                     _detailRow(
                       Icons.work_outline,
                       "Designation",
-                      employee['designation'],
+                      employee.jobTitle ?? "Not Specified",
                     ),
                     _detailRow(
                       Icons.calendar_month_outlined,
                       "Joining Date",
-                      "15 May 2023",
+                      employee.dateOfJoining,
                     ),
                     _detailRow(
                       Icons.timer_outlined,
                       "Shift",
-                      "Morning (09 - 06)",
+                      employee.shift,
                     ),
                   ]),
                   _infoSection("Contact Information", [
                     _detailRow(
                       Icons.phone_outlined,
                       "Mobile",
-                      "+91 98765 43210",
+                      employee.contactNumber,
                     ),
                     _detailRow(
                       Icons.email_outlined,
                       "Official Email",
-                      "${employee['name'].toString().toLowerCase().replaceAll(' ', '.')}@company.com",
+                      employee.officialMailId,
                     ),
                     _detailRow(
                       Icons.location_on_outlined,
-                      "Location",
-                      "Chennai, India",
+                      "Work Location",
+                      employee.workLocation,
                     ),
                   ]),
                   _infoSection("Statutory Details", [
                     _detailRow(
                       Icons.account_balance_outlined,
                       "Account No",
-                      "XXXX XXXX 5567",
+                      employee.accountNumber,
                     ),
                     _detailRow(
                       Icons.credit_card_outlined,
-                      "PAN Card",
-                      "ABCDE1234F",
+                      "PAN Number",
+                      employee.panNumber,
                     ),
                     _detailRow(
                       Icons.assignment_ind_outlined,
-                      "Aadhar No",
-                      "XXXX XXXX 8890",
+                      "Aadhar Number",
+                      employee.aadhaarNumber,
                     ),
                   ]),
                   _buildActionMenus(context),
@@ -472,7 +500,12 @@ class AdminEmployeeDetailsScreen extends StatelessWidget {
                 child: CircleAvatar(
                   radius: 55.r,
                   backgroundColor: Colors.white,
-                  backgroundImage: NetworkImage(employee['photo']),
+                  backgroundImage: employee.profilePhoto != null
+                      ? NetworkImage(employee.profilePhoto)
+                      : null,
+                  child: employee.profilePhoto == null
+                      ? Icon(Icons.person, size: 50.r, color: Colors.grey)
+                      : null,
                 ),
               ),
               Container(
@@ -485,13 +518,13 @@ class AdminEmployeeDetailsScreen extends StatelessWidget {
                   Icons.check,
                   color: Colors.white,
                   size: 16.sp,
-                ), // Status indicator
+                ),
               ),
             ],
           ),
           SizedBox(height: 16.h),
           Text(
-            employee['name'],
+            employee.name,
             style: GoogleFonts.poppins(
               fontSize: 22.sp,
               fontWeight: FontWeight.bold,
@@ -499,7 +532,7 @@ class AdminEmployeeDetailsScreen extends StatelessWidget {
             ),
           ),
           Text(
-            employee['designation'],
+            employee.department,
             style: GoogleFonts.poppins(
               fontSize: 14.sp,
               color: Colors.white.withOpacity(0.9),

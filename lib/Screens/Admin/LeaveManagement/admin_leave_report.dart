@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:intl/intl.dart';
+import '../../../Models/leave_api.dart';
 
 class AdminLeaveReportScreen extends StatefulWidget {
   const AdminLeaveReportScreen({super.key});
@@ -10,49 +12,41 @@ class AdminLeaveReportScreen extends StatefulWidget {
 }
 
 class _AdminLeaveReportScreenState extends State<AdminLeaveReportScreen> {
-  // Mock data for who is on leave or taken leave recently
-  final List<Map<String, dynamic>> _leaveRecords = [
-    {
-      "name": "Kavi Priyan",
-      "id": "EMP001",
-      "dept": "Development",
-      "type": "Sick Leave",
-      "from": "04 Apr 2024",
-      "to": "05 Apr 2024",
-      "status": "Currently on Leave",
-      "photo": "https://api.dicebear.com/7.x/avataaars/png?seed=Kavi",
-    },
-    {
-      "name": "Santhosh Mani",
-      "id": "EMP003",
-      "dept": "Creative",
-      "type": "Annual Leave",
-      "from": "15 Apr 2024",
-      "to": "19 Apr 2024",
-      "status": "Scheduled",
-      "photo": "https://api.dicebear.com/7.x/avataaars/png?seed=Santhosh",
-    },
-    {
-      "name": "Arun Kumar",
-      "id": "EMP002",
-      "dept": "HR",
-      "type": "Casual Leave",
-      "from": "01 Apr 2024",
-      "to": "01 Apr 2024",
-      "status": "Returned",
-      "photo": "https://api.dicebear.com/7.x/avataaars/png?seed=Arun",
-    },
-     {
-      "name": "Deepak Raj",
-      "id": "EMP005",
-      "dept": "Marketing",
-      "type": "Sick Leave",
-      "from": "10 Apr 2024",
-      "to": "10 Apr 2024",
-      "status": "Scheduled",
-      "photo": "https://api.dicebear.com/7.x/avataaars/png?seed=Deepak",
-    },
-  ];
+  List<LeaveRequestData>? _reportData;
+  bool _isLoading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _refreshData();
+  }
+
+  Future<void> _refreshData() async {
+    setState(() => _isLoading = true);
+    try {
+      final response = await LeaveApi.fetchLeaveRequests();
+      setState(() {
+        // Only show Accepted/Approved leaves in the Report
+        _reportData = response.data.where((r) {
+          final s = r.status?.toLowerCase();
+          return s == 'accept' || s == 'approved';
+        }).toList();
+        _isLoading = false;
+      });
+    } catch (e) {
+      debugPrint("Error fetching report: $e");
+      setState(() => _isLoading = false);
+    }
+  }
+
+  String _formatDate(String? d) {
+    if (d == null || d.isEmpty) return "N/A";
+    try {
+      return DateFormat('dd MMM yyyy').format(DateTime.parse(d));
+    } catch (_) {
+      return d;
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -67,18 +61,26 @@ class _AdminLeaveReportScreenState extends State<AdminLeaveReportScreen> {
         foregroundColor: Colors.white,
         elevation: 0,
       ),
-      body: Column(
-        children: [
-          _buildFilterBar(),
-          Expanded(
-            child: ListView.builder(
-              padding: EdgeInsets.all(16.w),
-              itemCount: _leaveRecords.length,
-              itemBuilder: (context, index) => _buildReportCard(_leaveRecords[index]),
+      body: _isLoading && _reportData == null
+          ? const Center(child: CircularProgressIndicator())
+          : Column(
+              children: [
+                _buildFilterBar(),
+                Expanded(
+                  child: RefreshIndicator(
+                    onRefresh: _refreshData,
+                    child: (_reportData == null || _reportData!.isEmpty)
+                        ? const Center(child: Text("No records found."))
+                        : ListView.builder(
+                            padding: EdgeInsets.all(16.w),
+                            itemCount: _reportData!.length,
+                            itemBuilder: (context, index) =>
+                                _buildReportCard(_reportData![index]),
+                          ),
+                  ),
+                ),
+              ],
             ),
-          ),
-        ],
-      ),
     );
   }
 
@@ -121,14 +123,9 @@ class _AdminLeaveReportScreenState extends State<AdminLeaveReportScreen> {
     );
   }
 
-  Widget _buildReportCard(Map<String, dynamic> record) {
-    Color statusColor;
-    switch (record['status']) {
-      case "Currently on Leave": statusColor = Colors.orange; break;
-      case "Scheduled": statusColor = Colors.blue; break;
-      case "Returned": statusColor = Colors.green; break;
-      default: statusColor = Colors.grey;
-    }
+  Widget _buildReportCard(LeaveRequestData record) {
+    Color statusColor = Colors.green; // Default for report (assuming accepted)
+    String statusText = record.status ?? "Accepted";
 
     return Container(
       margin: EdgeInsets.only(bottom: 12.h),
@@ -151,7 +148,17 @@ class _AdminLeaveReportScreenState extends State<AdminLeaveReportScreen> {
               children: [
                 CircleAvatar(
                   radius: 22.r,
-                  backgroundImage: NetworkImage(record['photo']),
+                  backgroundColor: const Color(0xFFE0F2F1),
+                  child: Text(
+                    record.employeeName.isNotEmpty
+                        ? record.employeeName[0].toUpperCase()
+                        : "?",
+                    style: TextStyle(
+                      color: const Color(0xFF26A69A),
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16.sp,
+                    ),
+                  ),
                 ),
                 SizedBox(width: 12.w),
                 Expanded(
@@ -159,12 +166,18 @@ class _AdminLeaveReportScreenState extends State<AdminLeaveReportScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        record['name'],
-                        style: GoogleFonts.poppins(fontSize: 14.sp, fontWeight: FontWeight.bold),
+                        record.employeeName,
+                        style: GoogleFonts.poppins(
+                          fontSize: 14.sp,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
                       Text(
-                        "${record['id']} | ${record['dept']}",
-                        style: GoogleFonts.poppins(fontSize: 11.sp, color: Colors.grey),
+                        "${record.employeeId ?? 'ID'} | ${record.department ?? 'Dept'}",
+                        style: GoogleFonts.poppins(
+                          fontSize: 11.sp,
+                          color: Colors.grey,
+                        ),
                       ),
                     ],
                   ),
@@ -176,7 +189,7 @@ class _AdminLeaveReportScreenState extends State<AdminLeaveReportScreen> {
                     borderRadius: BorderRadius.circular(8.r),
                   ),
                   child: Text(
-                    record['status'],
+                    statusText,
                     style: GoogleFonts.poppins(
                       color: statusColor,
                       fontSize: 9.sp,
@@ -193,8 +206,11 @@ class _AdminLeaveReportScreenState extends State<AdminLeaveReportScreen> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                _detailCol("Leave Type", record['type']),
-                _detailCol("Duration", "${record['from']} - ${record['to']}"),
+                _detailCol("Leave Type", record.leaveType),
+                _detailCol(
+                  "Duration",
+                  "${_formatDate(record.leaveStartDate)} - ${_formatDate(record.leaveEndDate)}",
+                ),
               ],
             ),
           ),

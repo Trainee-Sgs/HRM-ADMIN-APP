@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../Widgets/bottom_nav_bar.dart';
 import '../../Widgets/drawer_screen.dart';
 import 'AttendanceManagement/attendance_management.dart';
+import 'AttendanceManagement/attendance_screen.dart';
 import 'Onboarding/onboarding_management.dart';
 import 'PerformanceManagement/performance_management.dart';
 import 'TrainingDevelopment/training_management.dart';
@@ -19,7 +20,8 @@ import 'ComplaintManagement/admin_complaint_management.dart';
 import 'EmployeeManagement/admin_employee_details.dart';
 
 class AdminDashboard extends StatefulWidget {
-  const AdminDashboard({super.key});
+  final VoidCallback? onBackToHrm;
+  const AdminDashboard({super.key, this.onBackToHrm});
 
   @override
   State<AdminDashboard> createState() => _AdminDashboardState();
@@ -37,7 +39,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
     super.initState();
     _bodies = [
       _buildHomeBody(),
-      AttendanceManagementScreen(),
+      const AttendanceScreen(),
       const AdminPayrollManagementScreen(),
       const ChatGroupScreen(),
     ];
@@ -136,7 +138,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
       key: _scaffoldKey,
       backgroundColor: Colors.white,
       appBar: _currentIndex == 0 ? _buildAppBar() : null,
-      drawer: const AdminDrawer(),
+      drawer: AdminDrawer(onBackToHrm: widget.onBackToHrm),
       body: IndexedStack(index: _currentIndex, children: _bodies),
       bottomNavigationBar: CustomBottomNavBar(
         currentIndex: _currentIndex,

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:intl/intl.dart';
+import '../../../Models/leave_api.dart';
 
 class AdminLeaveRequestsScreen extends StatefulWidget {
   const AdminLeaveRequestsScreen({super.key});
@@ -11,26 +13,47 @@ class AdminLeaveRequestsScreen extends StatefulWidget {
 }
 
 class _AdminLeaveRequestsScreenState extends State<AdminLeaveRequestsScreen> {
-  final List<Map<String, dynamic>> _leaveRequests = [
-    {
-      "id": "1",
-      "name": "Kavi Priyan",
-      "type": "Casual Leave",
-      "reason": "Personal work at home",
-      "dates": "06 Apr - 08 Apr (3 Days)",
-      "appliedDate": "04-04-2026",
-      "status": "Pending",
-    },
-    {
-      "id": "2",
-      "name": "Arun Kumar",
-      "type": "Sick Leave",
-      "reason": "Suffering from high fever",
-      "dates": "05 Apr - 05 Apr (1 Day)",
-      "appliedDate": "03-04-2026",
-      "status": "Pending",
-    },
-  ];
+  List<LeaveRequestData>? _allRequests;
+  bool _isLoading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _refreshData();
+  }
+
+  Future<void> _refreshData() async {
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      final response = await LeaveApi.fetchLeaveRequests();
+      setState(() {
+        // Filter to only show PENDING requests in this screen
+        _allRequests = response.data.where((r) {
+          final s = r.status?.toLowerCase();
+          return s == 'pending' || s == null || s.isEmpty;
+        }).toList();
+        _isLoading = false;
+      });
+    } catch (e) {
+      debugPrint("Error fetching leave requests: $e");
+      setState(() {
+        _isLoading = false;
+      });
+    }
+  }
+
+  String _formatDate(String? dateStr) {
+    if (dateStr == null || dateStr.isEmpty) return "N/A";
+    try {
+      DateTime dt = DateTime.parse(dateStr);
+      return DateFormat('dd MMM').format(dt);
+    } catch (e) {
+      return dateStr;
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -48,37 +71,44 @@ class _AdminLeaveRequestsScreenState extends State<AdminLeaveRequestsScreen> {
           ),
         ),
       ),
-      body: Column(
-        children: [
-          _buildSummaryBar(),
-          Expanded(
-            child: ListView.builder(
-              padding: EdgeInsets.all(16.w),
-              itemCount: _leaveRequests.length,
-              itemBuilder: (context, index) {
-                return _buildRequestCard(_leaveRequests[index], index);
-              },
+      body: _isLoading && _allRequests == null
+          ? const Center(child: CircularProgressIndicator())
+          : _allRequests == null || _allRequests!.isEmpty
+          ? const Center(child: Text("No leave requests found."))
+          : Column(
+              children: [
+                _buildSummaryBar(_allRequests!),
+                Expanded(
+                  child: RefreshIndicator(
+                    onRefresh: _refreshData,
+                    child: ListView.builder(
+                      padding: EdgeInsets.all(16.w),
+                      itemCount: _allRequests!.length,
+                      itemBuilder: (context, index) {
+                        return _buildRequestCard(_allRequests![index], index);
+                      },
+                    ),
+                  ),
+                ),
+              ],
             ),
-          ),
-        ],
-      ),
     );
   }
 
-  Widget _buildSummaryBar() {
+  Widget _buildSummaryBar(List<LeaveRequestData> requests) {
     return Container(
       color: Colors.white,
       padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 12.h),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceAround,
         children: [
-          _summaryItem("Total", "${_leaveRequests.length}", Colors.blue),
+          _summaryItem("Total", "${requests.length}", Colors.blue),
           _summaryItem(
             "Pending",
-            "${_leaveRequests.where((r) => r['status'] == 'Pending').length}",
+            "${requests.where((r) => r.status?.toLowerCase() == 'pending').length}",
             Colors.orange,
           ),
-          _summaryItem("Recent", "2", Colors.green),
+          _summaryItem("Recent", "${requests.isEmpty ? 0 : 1}", Colors.green),
         ],
       ),
     );
@@ -103,9 +133,15 @@ class _AdminLeaveRequestsScreenState extends State<AdminLeaveRequestsScreen> {
     );
   }
 
-  Widget _buildRequestCard(Map<String, dynamic> request, int index) {
+  Widget _buildRequestCard(LeaveRequestData request, int index) {
     final TextEditingController rejectReasonController =
         TextEditingController();
+
+    String dateRange =
+        "${_formatDate(request.leaveStartDate)} - ${_formatDate(request.leaveEndDate)}";
+    if (request.totalDays != null && request.totalDays!.isNotEmpty) {
+      dateRange += " (${request.totalDays} Days)";
+    }
 
     return Container(
       margin: EdgeInsets.only(bottom: 16.h),
@@ -129,7 +165,9 @@ class _AdminLeaveRequestsScreenState extends State<AdminLeaveRequestsScreen> {
               CircleAvatar(
                 backgroundColor: const Color(0xFFE0F2F1),
                 child: Text(
-                  request['name'][0],
+                  request.employeeName.isNotEmpty
+                      ? request.employeeName[0].toUpperCase()
+                      : "?",
                   style: const TextStyle(
                     color: Color(0xFF26A69A),
                     fontWeight: FontWeight.bold,
@@ -142,14 +180,14 @@ class _AdminLeaveRequestsScreenState extends State<AdminLeaveRequestsScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      request['name'],
+                      request.employeeName,
                       style: GoogleFonts.poppins(
                         fontSize: 15.sp,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
                     Text(
-                      request['type'],
+                      request.leaveType,
                       style: GoogleFonts.poppins(
                         fontSize: 12.sp,
                         color: const Color(0xFF26A69A),
@@ -159,16 +197,49 @@ class _AdminLeaveRequestsScreenState extends State<AdminLeaveRequestsScreen> {
                   ],
                 ),
               ),
-              Text(
-                request['appliedDate'],
-                style: GoogleFonts.poppins(fontSize: 11.sp, color: Colors.grey),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(
+                    request.appliedDate ?? "N/A",
+                    style: GoogleFonts.poppins(
+                      fontSize: 11.sp,
+                      color: Colors.grey,
+                    ),
+                  ),
+                  if (request.status != null)
+                    Container(
+                      margin: EdgeInsets.only(top: 4.h),
+                      padding: EdgeInsets.symmetric(
+                        horizontal: 8.w,
+                        vertical: 2.h,
+                      ),
+                      decoration: BoxDecoration(
+                        color: _getStatusColor(
+                          request.status!,
+                        ).withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(4.r),
+                      ),
+                      child: Text(
+                        request.status!,
+                        style: GoogleFonts.poppins(
+                          fontSize: 10.sp,
+                          color: _getStatusColor(request.status!),
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                ],
               ),
             ],
           ),
           const Divider(height: 24),
-          _rowInfo(Icons.calendar_month_outlined, request['dates']),
+          _rowInfo(Icons.calendar_month_outlined, dateRange),
           SizedBox(height: 8.h),
-          _rowInfo(Icons.notes_outlined, request['reason']),
+          _rowInfo(
+            Icons.notes_outlined,
+            request.reason ?? "No reason provided",
+          ),
           const Divider(height: 24),
           Row(
             children: [
@@ -197,7 +268,7 @@ class _AdminLeaveRequestsScreenState extends State<AdminLeaveRequestsScreen> {
               SizedBox(width: 12.w),
               Expanded(
                 child: ElevatedButton(
-                  onPressed: () => _showApproveDialog(context, request),
+                  onPressed: () => _approveRequest(context, request),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.green,
                     elevation: 0,
@@ -221,157 +292,136 @@ class _AdminLeaveRequestsScreenState extends State<AdminLeaveRequestsScreen> {
     );
   }
 
-  void _showApproveDialog(BuildContext context, Map<String, dynamic> request) {
-    String selectedRole = "MD";
-    showDialog(
-      context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          title: Text(
-            "Approve Request",
-            style: GoogleFonts.poppins(
-              fontWeight: FontWeight.bold,
-              fontSize: 16.sp,
-            ),
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text("Forward To:", style: GoogleFonts.poppins(fontSize: 13.sp)),
-              SizedBox(height: 12.h),
-              _buildRoleDropdown(
-                selectedRole,
-                (val) => setDialogState(() => selectedRole = val!),
-              ),
-              SizedBox(height: 16.h),
-              Text(
-                "Are you sure you want to approve ${request['name']}'s leave?",
-                style: GoogleFonts.poppins(fontSize: 14.sp),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text("Cancel"),
-            ),
-            ElevatedButton(
-              onPressed: () {
-                Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text("Leave Approved by $selectedRole!")),
-                );
-              },
-              style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
-              child: const Text(
-                "Approve",
-                style: TextStyle(color: Colors.white),
-              ),
-            ),
-          ],
-        ),
-      ),
+  Color _getStatusColor(String status) {
+    switch (status.toLowerCase()) {
+      case 'accept':
+      case 'approved':
+        return Colors.green;
+      case 'reject':
+      case 'rejected':
+        return Colors.red;
+      case 'pending':
+        return Colors.orange;
+      default:
+        return Colors.grey;
+    }
+  }
+
+  void _approveRequest(BuildContext context, LeaveRequestData request) async {
+    final response = await LeaveApi.updateLeaveStatus(
+      id: request.id.toString(),
+      uid: request.uid.toString(),
+      status: "accept",
     );
+
+    if (response['error'] == false) {
+      if (mounted) {
+        setState(() {
+          _allRequests?.removeWhere((r) => r.id == request.id);
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("Leave Approved for ${request.employeeName}!"),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } else {
+      if (mounted) {
+        final errorMsg =
+            response['debug'] ?? response['message'] ?? "Update failed";
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("Failed to approve: $errorMsg"),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 5),
+          ),
+        );
+      }
+    }
   }
 
   void _showRejectDialog(
     BuildContext context,
-    Map<String, dynamic> request,
+    LeaveRequestData request,
     TextEditingController controller,
   ) {
-    String selectedRole = "MD";
     showDialog(
       context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          title: Text(
-            "Reject Request",
-            style: GoogleFonts.poppins(
-              fontWeight: FontWeight.bold,
-              fontSize: 16.sp,
-            ),
+      builder: (context) => AlertDialog(
+        title: Text(
+          "Reject Request",
+          style: GoogleFonts.poppins(
+            fontWeight: FontWeight.bold,
+            fontSize: 16.sp,
           ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                "Select Role to Reject:",
-                style: GoogleFonts.poppins(fontSize: 13.sp),
-              ),
-              SizedBox(height: 8.h),
-              _buildRoleDropdown(
-                selectedRole,
-                (val) => setDialogState(() => selectedRole = val!),
-              ),
-              SizedBox(height: 16.h),
-              Text(
-                "Reason for Rejection:",
-                style: GoogleFonts.poppins(fontSize: 13.sp),
-              ),
-              SizedBox(height: 8.h),
-              TextField(
-                controller: controller,
-                maxLines: 3,
-                decoration: InputDecoration(
-                  hintText: "Type reason here...",
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8.r),
-                  ),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              "Reason for Rejection:",
+              style: GoogleFonts.poppins(fontSize: 13.sp),
+            ),
+            SizedBox(height: 8.h),
+            TextField(
+              controller: controller,
+              maxLines: 3,
+              decoration: InputDecoration(
+                hintText: "Type reason here...",
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8.r),
                 ),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text("Cancel"),
-            ),
-            ElevatedButton(
-              onPressed: () {
-                Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text(
-                      "Rejected by $selectedRole: ${controller.text}",
-                    ),
-                  ),
-                );
-              },
-              style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-              child: const Text(
-                "Reject",
-                style: TextStyle(color: Colors.white),
               ),
             ),
           ],
         ),
-      ),
-    );
-  }
-
-  Widget _buildRoleDropdown(String current, Function(String?) onChanged) {
-    return Container(
-      padding: EdgeInsets.symmetric(horizontal: 12.w),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF1F5F9),
-        borderRadius: BorderRadius.circular(8.r),
-        border: Border.all(color: Colors.grey.shade300),
-      ),
-      child: DropdownButtonHideUnderline(
-        child: DropdownButton<String>(
-          value: current,
-          isExpanded: true,
-          style: GoogleFonts.poppins(
-            color: const Color(0xFF26A69A),
-            fontWeight: FontWeight.w600,
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text("Cancel"),
           ),
-          items: ["MD", "HR", "TL"].map((String type) {
-            return DropdownMenuItem<String>(value: type, child: Text(type));
-          }).toList(),
-          onChanged: onChanged,
-        ),
+          ElevatedButton(
+            onPressed: () async {
+              final response = await LeaveApi.updateLeaveStatus(
+                id: request.id.toString(),
+                uid: request.uid.toString(),
+                status: "reject",
+                rejectReason: controller.text.trim(),
+              );
+
+              if (mounted) {
+                Navigator.pop(context);
+                if (response['error'] == false) {
+                  setState(() {
+                    _allRequests?.removeWhere((r) => r.id == request.id);
+                  });
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text("Request Rejected: ${controller.text}"),
+                      backgroundColor: Colors.red,
+                    ),
+                  );
+                } else {
+                  final errorMsg =
+                      response['debug'] ??
+                      response['message'] ??
+                      "Update failed";
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text("Failed to reject: $errorMsg"),
+                      backgroundColor: Colors.red,
+                      duration: const Duration(seconds: 5),
+                    ),
+                  );
+                }
+              }
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text("Reject", style: TextStyle(color: Colors.white)),
+          ),
+        ],
       ),
     );
   }

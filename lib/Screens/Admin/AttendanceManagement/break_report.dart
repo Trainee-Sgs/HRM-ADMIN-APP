@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../../../Models/attendance_api.dart';
+import 'package:intl/intl.dart';
 
 class BreakReportScreen extends StatefulWidget {
   const BreakReportScreen({super.key});
@@ -10,44 +12,60 @@ class BreakReportScreen extends StatefulWidget {
 }
 
 class _BreakReportScreenState extends State<BreakReportScreen> {
-  final List<Map<String, dynamic>> _breakData = [
-    {
-      "name": "Kavi Priyan",
-      "id": "EMP001",
-      "breakIn": "01:30 PM",
-      "breakOut": "02:15 PM",
-      "duration": "45 mins",
-      "status": "Returned",
-      "photo": "https://api.dicebear.com/7.x/avataaars/png?seed=Kavi",
-    },
-    {
-      "name": "Deepak Raj",
-      "id": "EMP004",
-      "breakIn": "02:10 PM",
-      "breakOut": "--:--",
-      "duration": "35 mins",
-      "status": "Currently on Break",
-      "photo": "https://api.dicebear.com/7.x/avataaars/png?seed=Deepak",
-    },
-    {
-      "name": "Arun Kumar",
-      "id": "EMP002",
-      "breakIn": "01:10 PM",
-      "breakOut": "01:55 PM",
-      "duration": "45 mins",
-      "status": "Returned",
-      "photo": "https://api.dicebear.com/7.x/avataaars/png?seed=Arun",
-    },
-    {
-      "name": "Santhosh Mani",
-      "id": "EMP003",
-      "breakIn": "02:00 PM",
-      "breakOut": "02:45 PM",
-      "duration": "45 mins",
-      "status": "Returned",
-      "photo": "https://api.dicebear.com/7.x/avataaars/png?seed=Santhosh",
-    },
-  ];
+  List<BreakReportData> _breakRecords = [];
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchBreakData();
+  }
+
+  Future<void> _fetchBreakData() async {
+    setState(() => _isLoading = true);
+    try {
+      final response = await AttendanceApi.fetchBreakReport();
+      if (mounted) {
+        setState(() {
+          _breakRecords = response.data;
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Error fetching break report: $e")),
+        );
+      }
+    }
+  }
+
+  String _formatDateTime(String dateTimeStr) {
+    if (dateTimeStr.isEmpty) return "--:--";
+    try {
+      DateTime dt = DateTime.parse(dateTimeStr);
+      return DateFormat('hh:mm a').format(dt);
+    } catch (e) {
+      return dateTimeStr;
+    }
+  }
+
+  String _calculateDuration(String start, String end) {
+    if (start.isEmpty || end.isEmpty) return "--";
+    try {
+      DateTime dtStart = DateTime.parse(start);
+      DateTime dtEnd = DateTime.parse(end);
+      Duration diff = dtEnd.difference(dtStart);
+      if (diff.inMinutes < 60) {
+        return "${diff.inMinutes} mins";
+      } else {
+        return "${diff.inHours}h ${diff.inMinutes % 60}m";
+      }
+    } catch (e) {
+      return "--";
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -62,31 +80,39 @@ class _BreakReportScreenState extends State<BreakReportScreen> {
         foregroundColor: Colors.white,
         elevation: 0,
       ),
-      body: Column(
-        children: [
-          _buildBreakSummary(),
-          Expanded(
-            child: ListView.builder(
-              padding: EdgeInsets.all(16.w),
-              itemCount: _breakData.length,
-              itemBuilder: (context, index) => _breakCard(_breakData[index]),
+      body: RefreshIndicator(
+        onRefresh: _fetchBreakData,
+        child: Column(
+          children: [
+            _buildBreakSummary(),
+            Expanded(
+              child: _isLoading
+                  ? const Center(child: CircularProgressIndicator())
+                  : _breakRecords.isEmpty
+                      ? const Center(child: Text("No break records found"))
+                      : ListView.builder(
+                          padding: EdgeInsets.all(16.w),
+                          itemCount: _breakRecords.length,
+                          itemBuilder: (context, index) =>
+                              _breakCard(_breakRecords[index]),
+                        ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
 
   Widget _buildBreakSummary() {
-    int currentlyOnBreak = _breakData.where((b) => b['status'] == 'Currently on Break').length;
+    int currentlyOnBreak = _breakRecords.where((b) => b.breakOut.isEmpty).length;
     return Container(
       padding: EdgeInsets.all(20.w),
       color: Colors.white,
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceAround,
         children: [
-          _summaryCard("Currently on Break", "$currentlyOnBreak", Colors.orange),
-          _summaryCard("Total Returns", "${_breakData.length - currentlyOnBreak}", Colors.green),
+          _summaryCard("On Break", "$currentlyOnBreak", Colors.orange),
+          _summaryCard("Total Entries", "${_breakRecords.length}", Colors.green),
         ],
       ),
     );
@@ -101,8 +127,8 @@ class _BreakReportScreenState extends State<BreakReportScreen> {
     );
   }
 
-  Widget _breakCard(Map<String, dynamic> data) {
-    bool onBreak = data['status'] == 'Currently on Break';
+  Widget _breakCard(BreakReportData data) {
+    bool onBreak = data.breakOut.isEmpty;
     return Container(
       margin: EdgeInsets.only(bottom: 15.h),
       padding: EdgeInsets.all(16.w),
@@ -118,12 +144,18 @@ class _BreakReportScreenState extends State<BreakReportScreen> {
         ],
       ),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              CircleAvatar(
-                radius: 24.r,
-                backgroundImage: NetworkImage(data['photo']),
+              Container(
+                width: 48.r,
+                height: 48.r,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: Colors.teal.withOpacity(0.1),
+                ),
+                child: Icon(Icons.person, color: Colors.teal, size: 24.sp),
               ),
               SizedBox(width: 12.w),
               Expanded(
@@ -131,11 +163,11 @@ class _BreakReportScreenState extends State<BreakReportScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      data['name'],
+                      data.employeeName,
                       style: GoogleFonts.poppins(fontSize: 15.sp, fontWeight: FontWeight.bold),
                     ),
                     Text(
-                      "ID: ${data['id']}",
+                      "ID: ${data.employeeCode}",
                       style: GoogleFonts.poppins(fontSize: 12.sp, color: Colors.grey),
                     ),
                   ],
@@ -148,7 +180,7 @@ class _BreakReportScreenState extends State<BreakReportScreen> {
                   borderRadius: BorderRadius.circular(10.r),
                 ),
                 child: Text(
-                  data['status'],
+                  onBreak ? "On Break" : "Returned",
                   style: GoogleFonts.poppins(
                     fontSize: 10.sp,
                     fontWeight: FontWeight.bold,
@@ -158,13 +190,24 @@ class _BreakReportScreenState extends State<BreakReportScreen> {
               ),
             ],
           ),
+          if (data.reason.isNotEmpty) ...[
+            SizedBox(height: 12.h),
+            Text(
+              "Reason: ${data.reason}",
+              style: GoogleFonts.poppins(
+                fontSize: 12.sp,
+                color: Colors.blueGrey,
+                fontStyle: FontStyle.italic,
+              ),
+            ),
+          ],
           const Divider(height: 30),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              _detailItem("Break In", data['breakIn'], Icons.coffee),
-              _detailItem("Break Out", data['breakOut'], Icons.restaurant),
-              _detailItem("Duration", data['duration'], Icons.timer),
+              _detailItem("Break In", _formatDateTime(data.breakIn), Icons.coffee),
+              _detailItem("Break Out", _formatDateTime(data.breakOut), Icons.restaurant),
+              _detailItem("Duration", _calculateDuration(data.breakIn, data.breakOut), Icons.timer),
             ],
           ),
         ],

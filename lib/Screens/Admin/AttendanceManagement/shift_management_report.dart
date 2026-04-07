@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../../../Models/attendance_api.dart';
 
 class ShiftManagementScreen extends StatefulWidget {
   const ShiftManagementScreen({super.key});
@@ -10,33 +11,37 @@ class ShiftManagementScreen extends StatefulWidget {
 }
 
 class _ShiftManagementScreenState extends State<ShiftManagementScreen> {
-  final List<Map<String, dynamic>> _shifts = [
-    {
-      "name": "General Shift",
-      "timing": "09:00 AM - 06:00 PM",
-      "count": 84,
-      "color": Colors.blue,
-    },
-    {
-      "name": "Night Shift",
-      "timing": "09:00 PM - 06:00 AM",
-      "count": 22,
-      "color": Colors.indigo,
-    },
-    {
-      "name": "Evening Shift",
-      "timing": "02:00 PM - 10:00 PM",
-      "count": 18,
-      "color": Colors.orange,
-    },
-  ];
+  List<ShiftTypeData> _shiftTypes = [];
+  List<ShiftAllocationData> _shiftAllocations = [];
+  bool _isLoading = true;
 
-  final List<Map<String, dynamic>> _employeeShifts = [
-    {"name": "Kavi Priyan", "shift": "General Shift", "id": "EMP001", "dept": "Development"},
-    {"name": "Arun Kumar", "shift": "General Shift", "id": "EMP002", "dept": "HR"},
-    {"name": "Deepak Raj", "shift": "Night Shift", "id": "EMP004", "dept": "Marketing"},
-    {"name": "Santhosh Mani", "shift": "Evening Shift", "id": "EMP003", "dept": "Creative"},
-  ];
+  @override
+  void initState() {
+    super.initState();
+    _fetchShiftsAndAllocations();
+  }
+
+  Future<void> _fetchShiftsAndAllocations() async {
+    setState(() => _isLoading = true);
+    try {
+      final typesResponse = await AttendanceApi.fetchShiftTypes();
+      final allocationsResponse = await AttendanceApi.fetchShiftAllocations();
+      if (mounted) {
+        setState(() {
+          _shiftTypes = typesResponse.data;
+          _shiftAllocations = allocationsResponse.data;
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Error fetching records: $e")),
+        );
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -73,11 +78,20 @@ class _ShiftManagementScreenState extends State<ShiftManagementScreen> {
   }
 
   Widget _buildShiftTypes() {
+    if (_isLoading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    if (_shiftTypes.isEmpty) {
+      return const Center(child: Text("No shift types found"));
+    }
     return ListView.builder(
       padding: EdgeInsets.all(16.w),
-      itemCount: _shifts.length,
+      itemCount: _shiftTypes.length,
       itemBuilder: (context, index) {
-        final shift = _shifts[index];
+        final shift = _shiftTypes[index];
+        final List<Color> colors = [Colors.blue, Colors.indigo, Colors.orange, Colors.teal, Colors.purple];
+        final Color cardColor = colors[index % colors.length];
+
         return Container(
           margin: EdgeInsets.only(bottom: 12.h),
           padding: EdgeInsets.all(20.w),
@@ -91,7 +105,7 @@ class _ShiftManagementScreenState extends State<ShiftManagementScreen> {
                 offset: const Offset(0, 4),
               ),
             ],
-            border: Border(left: BorderSide(color: shift['color'], width: 6.w)),
+            border: Border(left: BorderSide(color: cardColor, width: 6.w)),
           ),
           child: Row(
             children: [
@@ -100,23 +114,28 @@ class _ShiftManagementScreenState extends State<ShiftManagementScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      shift['name'],
+                      shift.shiftName.isNotEmpty ? shift.shiftName : "Unnamed Shift",
                       style: GoogleFonts.poppins(fontSize: 16.sp, fontWeight: FontWeight.bold),
                     ),
                     Text(
-                      shift['timing'],
+                      "${shift.startTime} - ${shift.endTime}",
                       style: GoogleFonts.poppins(fontSize: 13.sp, color: Colors.grey),
                     ),
+                    if (shift.breakDuration.isNotEmpty)
+                      Text(
+                        "Break: ${shift.breakDuration}",
+                        style: GoogleFonts.poppins(fontSize: 11.sp, color: Colors.teal),
+                      ),
                   ],
                 ),
               ),
               Column(
                 children: [
                   Text(
-                    shift['count'].toString(),
-                    style: GoogleFonts.poppins(fontSize: 18.sp, fontWeight: FontWeight.bold, color: shift['color']),
+                    shift.shiftCode,
+                    style: GoogleFonts.poppins(fontSize: 18.sp, fontWeight: FontWeight.bold, color: cardColor),
                   ),
-                  Text("Staffs", style: GoogleFonts.poppins(fontSize: 11.sp, color: Colors.grey)),
+                  Text("Code", style: GoogleFonts.poppins(fontSize: 11.sp, color: Colors.grey)),
                 ],
               ),
             ],
@@ -127,11 +146,17 @@ class _ShiftManagementScreenState extends State<ShiftManagementScreen> {
   }
 
   Widget _buildAssignedShifts() {
+    if (_isLoading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    if (_shiftAllocations.isEmpty) {
+      return const Center(child: Text("No assigned shifts found"));
+    }
     return ListView.builder(
       padding: EdgeInsets.all(16.w),
-      itemCount: _employeeShifts.length,
+      itemCount: _shiftAllocations.length,
       itemBuilder: (context, index) {
-        final emp = _employeeShifts[index];
+        final emp = _shiftAllocations[index];
         return Card(
           elevation: 0,
           margin: EdgeInsets.only(bottom: 10.h),
@@ -140,10 +165,28 @@ class _ShiftManagementScreenState extends State<ShiftManagementScreen> {
             contentPadding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 8.h),
             leading: CircleAvatar(
               backgroundColor: const Color(0xFF26A69A).withOpacity(0.1),
-              child: Text(emp['name'][0], style: const TextStyle(color: Color(0xFF26A69A), fontWeight: FontWeight.bold)),
+              child: Text(
+                emp.employeeName.isNotEmpty ? emp.employeeName[0] : "?",
+                style: const TextStyle(color: Color(0xFF26A69A), fontWeight: FontWeight.bold),
+              ),
             ),
-            title: Text(emp['name'], style: GoogleFonts.poppins(fontSize: 14.sp, fontWeight: FontWeight.bold)),
-            subtitle: Text("${emp['id']} | ${emp['dept']}", style: GoogleFonts.poppins(fontSize: 11.sp, color: Colors.grey)),
+            title: Text(
+              emp.employeeName.isNotEmpty ? emp.employeeName : "Unknown Employee",
+              style: GoogleFonts.poppins(fontSize: 14.sp, fontWeight: FontWeight.bold),
+            ),
+            subtitle: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  "${emp.employeeCode} | ${emp.department}",
+                  style: GoogleFonts.poppins(fontSize: 11.sp, color: Colors.grey),
+                ),
+                Text(
+                  "Date: ${emp.allocateDate}",
+                  style: GoogleFonts.poppins(fontSize: 10.sp, color: Colors.teal),
+                ),
+              ],
+            ),
             trailing: Container(
               padding: EdgeInsets.symmetric(horizontal: 8.w, vertical: 4.h),
               decoration: BoxDecoration(
@@ -151,7 +194,7 @@ class _ShiftManagementScreenState extends State<ShiftManagementScreen> {
                 borderRadius: BorderRadius.circular(6.r),
               ),
               child: Text(
-                emp['shift'],
+                emp.shiftType.isNotEmpty ? emp.shiftType : "Not Set",
                 style: GoogleFonts.poppins(fontSize: 10.sp, fontWeight: FontWeight.w600, color: Colors.blueGrey),
               ),
             ),
