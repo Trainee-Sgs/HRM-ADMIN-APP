@@ -3,25 +3,15 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../Widgets/bottom_nav_bar.dart';
 import '../../Widgets/drawer_screen.dart';
-import 'AttendanceManagement/attendance_management.dart';
 import 'AttendanceManagement/attendance_screen.dart';
-import 'Onboarding/onboarding_management.dart';
-import 'PerformanceManagement/performance_management.dart';
-import 'TrainingDevelopment/training_management.dart';
-import 'HealthSafety/health_safety_management.dart';
 import 'Chat/chat_groups.dart';
-
-import 'RecuritmentScreens/recruitment.dart';
-import 'LeaveManagement/admin_leave_management.dart';
-import 'PermissionManagement/admin_permission_management.dart';
-import 'ExpenseManagement/admin_expense_management.dart';
 import 'PayrollManagement/admin_payroll_management.dart';
-import 'ComplaintManagement/admin_complaint_management.dart';
-import 'EmployeeManagement/admin_employee_details.dart';
 
 class AdminDashboard extends StatefulWidget {
   final VoidCallback? onBackToHrm;
-  const AdminDashboard({super.key, this.onBackToHrm});
+  final bool isEmbedded;
+  final GlobalKey<ScaffoldState>? scaffoldKey;
+  const AdminDashboard({super.key, this.onBackToHrm, this.isEmbedded = false, this.scaffoldKey});
 
   @override
   State<AdminDashboard> createState() => _AdminDashboardState();
@@ -45,99 +35,14 @@ class _AdminDashboardState extends State<AdminDashboard> {
     ];
   }
 
-  final List<Map<String, dynamic>> hubItems = [
-    {
-      "title": "Employee",
-      "icon": Icons.badge_outlined,
-      "color": const Color(0xFFF1F8E9), // Light Green
-      "isDark": false,
-      "target": const AdminEmployeeFeatureScreen(),
-    },
-    {
-      "title": "Attendance",
-      "icon": Icons.calendar_month_outlined,
-      "color": const Color(0xFFE0F2F1), // Light Mint
-      "isDark": false,
-      "target": AttendanceManagementScreen(),
-    },
-    {
-      "title": "Leave",
-      "icon": Icons.event_note_outlined,
-      "color": const Color(0xFFFFF3E0), // Light Orange
-      "isDark": false,
-      "target": const AdminLeaveManagementScreen(),
-    },
-    {
-      "title": "Recruitment",
-      "icon": Icons.person_search_outlined,
-      "color": const Color(0xFFE1F5FE), // Light Blue
-      "isDark": false,
-      "target": const RecruitmentScreen(),
-    },
-    {
-      "title": "Onboarding",
-      "icon": Icons.how_to_reg_outlined,
-      "color": const Color(0xFFF3E5F5), // Light Purple
-      "isDark": false,
-      "target": const OnboardingManagementScreen(),
-    },
-    {
-      "title": "Complaints",
-      "icon": Icons.gavel_outlined,
-      "color": const Color(0xFFFFEBEE), // Light Red
-      "isDark": false,
-      "target": const AdminComplaintManagementScreen(),
-    },
-    {
-      "title": "Payroll",
-      "icon": Icons.payments_outlined,
-      "color": const Color(0xFFE8EAF6), // Light Indigo
-      "isDark": false,
-      "target": const AdminPayrollManagementScreen(),
-    },
-    {
-      "title": "Permissions",
-      "icon": Icons.admin_panel_settings_outlined,
-      "color": const Color(0xFFF0F4C3), // Light Lime
-      "isDark": false,
-      "target": const AdminPermissionManagementScreen(),
-    },
-    {
-      "title": "Expense",
-      "icon": Icons.account_balance_wallet_outlined,
-      "color": const Color(0xFFEFEBE9), // Light Brown
-      "isDark": false,
-      "target": const AdminExpenseManagementScreen(),
-    },
-    {
-      "title": "Performance",
-      "icon": Icons.speed_outlined,
-      "color": const Color(0xFFE0F7FA), // Light Cyan
-      "isDark": false,
-      "target": const PerformanceManagementScreen(),
-    },
-    {
-      "title": "Training",
-      "icon": Icons.school_outlined,
-      "color": const Color(0xFFFFF9C4), // Light Yellow
-      "isDark": false,
-      "target": const TrainingManagementScreen(),
-    },
-    {
-      "title": "Health & Safety",
-      "icon": Icons.health_and_safety_outlined,
-      "color": const Color(0xFFFCE4EC), // Light Rose
-      "isDark": false,
-      "target": const HealthSafetyManagementScreen(),
-    },
-  ];
-
   @override
   Widget build(BuildContext context) {
+    final effectiveKey = widget.scaffoldKey ?? _scaffoldKey;
     return Scaffold(
-      key: _scaffoldKey,
+      key: effectiveKey,
       backgroundColor: Colors.white,
-      appBar: _currentIndex == 0 ? _buildAppBar() : null,
+      drawerEnableOpenDragGesture: !widget.isEmbedded,
+      appBar: (widget.isEmbedded || _currentIndex != 0) ? null : _buildAppBar(),
       drawer: AdminDrawer(onBackToHrm: widget.onBackToHrm),
       body: IndexedStack(index: _currentIndex, children: _bodies),
       bottomNavigationBar: CustomBottomNavBar(
@@ -195,31 +100,6 @@ class _AdminDashboardState extends State<AdminDashboard> {
           ),
           SizedBox(height: 24.h),
 
-          Text(
-            "Management Hub",
-            style: GoogleFonts.poppins(
-              fontSize: 16.sp,
-              fontWeight: FontWeight.w600,
-              color: Colors.black87,
-            ),
-          ),
-          SizedBox(height: 16.h),
-
-          /// HUB GRID
-          GridView.builder(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 2,
-              crossAxisSpacing: 12.w,
-              mainAxisSpacing: 12.h,
-              childAspectRatio: 2.3, // Square to Rectangle
-            ),
-            itemCount: hubItems.length,
-            itemBuilder: (context, index) {
-              return _buildHubItem(hubItems[index]);
-            },
-          ),
           SizedBox(height: 24.h),
 
           /// RECENT ACTIVITY BANNER
@@ -270,21 +150,20 @@ class _AdminDashboardState extends State<AdminDashboard> {
   }
 
   PreferredSizeWidget _buildAppBar() {
+    final effectiveKey = widget.scaffoldKey ?? _scaffoldKey;
     return AppBar(
       backgroundColor: const Color(0xFF26A69A),
       elevation: 0,
       automaticallyImplyLeading: false,
       leading: IconButton(
-        icon: const Icon(Icons.sort, color: Colors.white),
-        onPressed: () {
-          _scaffoldKey.currentState?.openDrawer();
-        },
+        icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.white, size: 20),
+        onPressed: widget.onBackToHrm ?? () => Navigator.pop(context),
       ),
       title: Text(
         "Welcome Harish",
-        style: GoogleFonts.poppins(
+        style: GoogleFonts.outfit(
           fontSize: 18.sp,
-          fontWeight: FontWeight.w600,
+          fontWeight: FontWeight.w700,
           color: Colors.white,
         ),
       ),
@@ -293,96 +172,18 @@ class _AdminDashboardState extends State<AdminDashboard> {
           icon: const Icon(Icons.campaign_outlined, color: Colors.white),
           onPressed: () {},
         ),
-        IconButton(
-          icon: const Icon(Icons.notifications_none, color: Colors.white),
-          onPressed: () {},
-        ),
-        SizedBox(width: 8.w),
-      ],
-    );
-  }
-
-  Widget _buildHubItem(Map<String, dynamic> item, {bool isCentered = false}) {
-    bool isDark = item['isDark'] ?? true;
-    return GestureDetector(
-      onTap: () {
-        if (item['target'] != null) {
-          Navigator.push(
-            context,
-            MaterialPageRoute(builder: (_) => item['target']),
-          );
-        }
-      },
-      child: Container(
-        decoration: BoxDecoration(
-          color: item['color'],
-          borderRadius: BorderRadius.circular(12.r),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.04),
-              blurRadius: 6,
-              offset: const Offset(0, 2),
-            ),
-          ],
-        ),
-        child: Padding(
-          padding: EdgeInsets.symmetric(horizontal: 10.w),
-          child: Row(
-            mainAxisAlignment: isCentered
-                ? MainAxisAlignment.center
-                : MainAxisAlignment.start,
-            children: [
-              Container(
-                padding: EdgeInsets.all(6.w),
-                decoration: BoxDecoration(
-                  color: isDark ? Colors.white24 : Colors.black12,
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(
-                  item['icon'],
-                  color: isDark ? Colors.white : Colors.black87,
-                  size: 20.sp,
-                ),
-              ),
-              SizedBox(width: 8.w),
-              isCentered
-                  ? Text(
-                      item['title'],
-                      style: GoogleFonts.poppins(
-                        fontSize: 12.sp,
-                        fontWeight: FontWeight.w600,
-                        color: isDark ? Colors.white : Colors.black87,
-                      ),
-                    )
-                  : Expanded(
-                      child: Text(
-                        item['title'],
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: GoogleFonts.poppins(
-                          fontSize: 12.sp,
-                          fontWeight: FontWeight.w600,
-                          color: isDark ? Colors.white : Colors.black87,
-                        ),
-                      ),
-                    ),
-              SizedBox(width: 8.w),
-              Container(
-                padding: EdgeInsets.all(4.w),
-                decoration: const BoxDecoration(
-                  color: Color(0xFF26A69A), // Application Theme Teal
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(
-                  Icons.arrow_forward_ios,
-                  color: Colors.white,
-                  size: 10.sp,
-                ),
-              ),
-            ],
+        GestureDetector(
+          onTap: () {
+            effectiveKey.currentState?.openDrawer();
+          },
+          child: const CircleAvatar(
+            radius: 16,
+            backgroundColor: Colors.white24,
+            child: Icon(Icons.person_rounded, color: Colors.white, size: 20),
           ),
         ),
-      ),
+        const SizedBox(width: 16),
+      ],
     );
   }
 
